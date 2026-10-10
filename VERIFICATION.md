@@ -11,8 +11,17 @@
 - ブラウザの未処理例外0、検証中コンソールエラー・警告0
 - トップ、対話、記録のスクリーンショットを確認。画像は `output/playwright/` に保存（Git対象外）
 
-## 未検証
+## GitHub Pages公開検証
 
-GitHub CLI認証待ちのため、GitHubリポジトリ作成、push、GitHub Pages公開、本番URLでの確認は未実施。ローカルの検証成功を公開完了とは扱わない。
+- 公開URL: https://papua2129.github.io/shaberika/
+- リポジトリ: https://github.com/papua2129/shaberika
+- GitHub Actions: https://github.com/papua2129/shaberika/actions/runs/38012181846 （テスト・ビルド・デプロイ成功）
+- 公開URLがHTTP 200で応答することを確認
+- 専用のテストブラウザで `tests/browser-smoke.js` の接続先だけを公開URLに変更し、30項目を再実行して全件成功
+- CSS/JavaScriptを含めHTTPエラー0、コンソールエラー0、未処理例外0
+- ハッシュ付きURLへの直接アクセス・再読み込み、保存復元、ルーレット、対話、記録画面を検証
+- 公開画面のスクリーンショットを取得し、アプリ内ブラウザでも表示を目視確認
+
+## 既知の制約・未検証
 
 参考画像は未提供のため画像との照合は未実施。Firefox/Safari/実機Chromebookでの検証は未実施。複数タブからの同時書き込みには原子的な排他処理を設けていないため、1タブでの利用を推奨する。

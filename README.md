@@ -1,5 +1,7 @@
 # シャベリカ
 
+[アプリを開く](https://papua2129.github.io/shaberika/) · [GitHubリポジトリ](https://github.com/papua2129/shaberika)
+
 **聞いて、聴いて、訊いて。** 小学4年生を中心に、2〜6人で友達の話を聴き、対話をつなぐWebアプリ。ログイン・得点・勝敗はありません。
 
 ## 機能
