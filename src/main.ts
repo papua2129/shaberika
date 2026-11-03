@@ -12,6 +12,7 @@ import {
   startTalk,
   pass,
   finish,
+  restart,
   type State,
 } from "./core";
 const app = document.querySelector<HTMLDivElement>("#app")!;
@@ -27,6 +28,7 @@ try {
   state = fresh();
   notice = "このブラウザでは保存できません。画面を閉じると記録が消えます。";
 }
+let storageReady = false;
 let spinning = false;
 let spinTimer: number | undefined;
 let paused = false;
@@ -56,13 +58,28 @@ const hints = [
 ];
 const glass =
   '<svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><circle cx="27" cy="26" r="18" stroke="currentColor" stroke-width="3"/><path d="m40 40 16 16" stroke="currentColor" stroke-width="7" stroke-linecap="round"/><path d="M17 26a10 10 0 0 1 10-10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-function save() {
+function save(): boolean {
   try {
-    localStorage.setItem(KEY, JSON.stringify(state));
+    const serialized = JSON.stringify(state);
+    localStorage.setItem(KEY, serialized);
+    if (localStorage.getItem(KEY) !== serialized)
+      throw Error("Storage verification failed");
+    storageReady = true;
+    return true;
   } catch {
-    notice =
-      "保存できませんでした。この画面を閉じると、今回の進み具合が失われることがあります。";
+    storageReady = false;
+    notice = "保存を確認できません。カードの重複を防ぐため、抽選を停止しています。ブラウザの保存設定を確認してください。";
+    return false;
   }
+}
+// Never show a drawn card unless its exclusion was durably saved.
+function commit(next: State): boolean {
+  const old = state;
+  state = next;
+  if (save()) return true;
+  state = old;
+  render();
+  return false;
 }
 function stopSpin() {
   clearInterval(spinTimer);
@@ -74,7 +91,7 @@ function checkDay() {
     state = next;
     stopSpin();
     paused = false;
-    notice = "日付が変わりました。今日の30テーマを新しく用意しました。";
+    notice = "日付が変わりました。使用済みカードは引き続き除外されます。";
     save();
     return true;
   }
@@ -98,12 +115,12 @@ function home() {
   return `<section class="home"><div class="hero-copy"><p class="eyebrow">SHABERIKA DETECTIVE OFFICE</p><p class="small-title">友達の「まだ知らない」を、見つけよう。</p><h1>シャベリカ<span class="title-dot">.</span></h1><h2 class="catch">聞いて、聴いて、訊いて</h2><p class="intro">ひとつの話題から、広がる会話。<br>耳をすませば、友達の新しい一面が見えてくる。</p><div class="hero-actions">${button(state.active ? "つづきからはじめる" : "はじめる　→", "begin", "primary")}<a class="text-link" href="#help">はじめての方へ ↗</a></div><p class="fine">小学4年生から ・ 2〜6人 ・ 勝ち負けなし</p></div><div class="desk-art" aria-hidden="true"><div class="orbit"></div><div class="folder"><div class="folder-tab">TALK FILES</div><p class="file-no">SHABERIKA / 030</p><div class="file-rule"></div><h3>友達のこと、<br>もっと知りたい。</h3><p>会話の手がかりは、<br>きっとすぐそばに。</p><div class="seal">S</div></div><div class="note"><span>今日の手がかり</span><p>「たとえば？」から<br>はじまる発見。</p><div class="note-lines"></div></div><div class="big-glass">${glass}</div><span class="art-caption">EVERY CONVERSATION IS A DISCOVERY.</span></div></section><section class="steps" aria-label="活動の流れ"><article><span>01</span><div><h3>話題を見つける</h3><p>ルーレットで、今日のテーマを。</p></div></article><article><span>02</span><div><h3>じっくり聴く</h3><p>ことばのヒントで、会話をつなごう。</p></div></article><article><span>03</span><div><h3>発見をふり返る</h3><p>みんなで話した記録が残るよ。</p></div></article></section>`;
 }
 function complete() {
-  return `<section class="center completion"><p class="eyebrow">TODAY'S FILE — COMPLETE</p><div class="completion-icon">${glass}</div><h1>今日の30テーマを<br>すべて見つけたね。</h1><p>話したテーマも、パスしたテーマも。<br>また明日、新しい気持ちで話してみよう。</p><div class="actions"><a class="primary" href="#records">今日の記録を見る</a><a class="secondary" href="#home">ホームへ</a></div></section>`;
+  return `<section class="center completion"><p class="eyebrow">TODAY'S FILE — COMPLETE</p><div class="completion-icon">${glass}</div><h1>30テーマを<br>すべて見つけたね。</h1><p>話したテーマも、パスしたテーマも。<br>次の30テーマを始めるときは、新しい周回に進もう。</p><div class="actions"><a class="primary" href="#records">今日の記録を見る</a>${button("新しい30テーマを始める", "restart")}<a class="secondary" href="#home">ホームへ</a></div></section>`;
 }
 function roulette() {
   if (!state.active && state.used.length === 30) return complete();
   const t = state.active?.theme;
-  return `<section class="roulette center"><p class="eyebrow">STEP 01 / FIND A TOPIC</p><h1>今日の話題を見つけよう</h1><p>話しにくいテーマは、パスしてもだいじょうぶ。</p><div class="topic-card ${t !== undefined ? "chosen" : ""}"><div class="card-corner">TALK FILE</div><p class="category" id="category">${t === undefined ? "30の話題から、ひとつの発見" : categories[Math.floor(t / 6)]}</p><div id="topic" class="topic" ${!spinning ? 'aria-live="polite"' : ""}>${t === undefined ? (spinning ? "どんな話題が出るかな？" : "何を話そう？") : themes[t]}</div><div class="card-bottom"><span>SHABERIKA</span><span>残り ${remaining(state).length} テーマ</span></div></div><div class="actions">${t !== undefined ? button("対話スタート　→", "talk", "primary") + button("パスする", "pass") : button(spinning ? "ストップ" : "スタート", spinning ? "stop" : "spin", "primary")}</div><p class="fine">${t !== undefined ? "選ばれたテーマは、今日もう一度出ることはありません。" : "「スタート」で動かして、「ストップ」で決めよう。"}</p></section>`;
+  return `<section class="roulette center"><p class="eyebrow">STEP 01 / FIND A TOPIC</p><h1>今日の話題を見つけよう</h1><p>話しにくいテーマは、パスしてもだいじょうぶ。</p><div class="topic-card ${t !== undefined ? "chosen" : ""}"><div class="card-corner">TALK FILE</div><p class="category" id="category">${t === undefined ? "30の話題から、ひとつの発見" : categories[Math.floor(t / 6)]}</p><div id="topic" class="topic" ${!spinning ? 'aria-live="polite"' : ""}>${t === undefined ? (spinning ? "どんな話題が出るかな？" : "何を話そう？") : themes[t]}</div><div class="card-bottom"><span>SHABERIKA</span><span>残り ${remaining(state).length} テーマ</span></div></div><div class="actions">${t !== undefined ? button("対話スタート　→", "talk", "primary") + button("パスする", "pass") : button(spinning ? "ストップ" : "スタート", spinning ? "stop" : "spin", "primary")}</div><p class="fine">${t !== undefined ? "選ばれたテーマは、新しい周回を始めるまで、もう一度出ることはありません。" : "「スタート」で動かして、「ストップ」で決めよう。"}</p></section>`;
 }
 function talk() {
   if (!state.active) {
@@ -167,7 +184,7 @@ function records() {
   )}</div></section><section class="paper"><h2>テーマごとの記録</h2><details><summary>30テーマの実施回数を見る</summary><ul class="theme-counts">${themes.map((t, i) => `<li>${t}<strong>${state.records.filter((r) => r.theme === i).length}回</strong></li>`).join("")}</ul></details><p class="storage-note">記録はこの端末・ブラウザだけに保存されます。<br>ほかの端末とは同期されず、ブラウザのデータを消すと失われます。</p>${button("保存データをすべて消す", "delete", "danger")}</section></div></section>`;
 }
 function help() {
-  return `<section class="help"><p class="eyebrow">WELCOME TO OUR OFFICE</p><h1>シャベリカの使い方</h1><p class="lead">話すのが得意でも、ちょっと苦手でも。<br>ここでは、みんなが「ことばの探偵」です。</p><div class="help-grid"><article class="paper"><span class="step-number">01</span><h2>2〜6人で集まろう</h2><p>同じ画面を見ながら使います。名前の入力やログインはいりません。得点も勝ち負けもありません。</p></article><article class="paper"><span class="step-number">02</span><h2>テーマを決めよう</h2><p>「スタート」→「ストップ」で話題が決まります。話しにくいときはパスでOK。選ばれた話題は、今日もう出てきません。</p></article><article class="paper"><span class="step-number">03</span><h2>聴いて、つなげよう</h2><p>まずはひとりの話を最後まで。ヒントを使って、受け止めたり、聞き返したりしてみましょう。全員が話す必要はありません。</p></article><article class="paper"><span class="step-number">04</span><h2>発見をふり返ろう</h2><p>「対話を終える」を押すとテーマが記録されます。友達の話した内容や名前は保存されません。次のテーマへ進んでみよう。</p></article></div><section class="paper"><h2>先生・おうちの方へ</h2><p>対話中は「一時停止」でヒントの動きを一時停止できます。「動きを止める」でも静止表示にできます。端末の「視差効果を減らす」設定にも対応しています。</p><p>同日の抽選状況と過去の記録は、このブラウザ内のlocalStorageに保存します。端末・ブラウザ間の同期はありません。ブラウザデータの削除やプライベートモードの終了により失われる場合があります。日付は端末の時計に従います。同時操作による競合を避けるため、1つのタブで使用してください。</p><p>マイク・カメラ・Cookie・アクセス解析は使用しません。アプリが個人情報や会話を送信することはありません。</p></section><a href="#roulette" class="primary">はじめる　→</a></section>`;
+  return `<section class="help"><p class="eyebrow">WELCOME TO OUR OFFICE</p><h1>シャベリカの使い方</h1><p class="lead">話すのが得意でも、ちょっと苦手でも。<br>ここでは、みんなが「ことばの探偵」です。</p><div class="help-grid"><article class="paper"><span class="step-number">01</span><h2>2〜6人で集まろう</h2><p>同じ画面を見ながら使います。名前の入力やログインはいりません。得点も勝ち負けもありません。</p></article><article class="paper"><span class="step-number">02</span><h2>テーマを決めよう</h2><p>「スタート」→「ストップ」で話題が決まります。話しにくいときはパスでOK。選ばれた話題は、30枚使い切るまで出てきません。</p></article><article class="paper"><span class="step-number">03</span><h2>聴いて、つなげよう</h2><p>まずはひとりの話を最後まで。ヒントを使って、受け止めたり、聞き返したりしてみましょう。全員が話す必要はありません。</p></article><article class="paper"><span class="step-number">04</span><h2>発見をふり返ろう</h2><p>「対話を終える」を押すとテーマが記録されます。友達の話した内容や名前は保存されません。次のテーマへ進んでみよう。</p></article></div><section class="paper"><h2>先生・おうちの方へ</h2><p>対話中は「一時停止」でヒントの動きを一時停止できます。「動きを止める」でも静止表示にできます。端末の「視差効果を減らす」設定にも対応しています。</p><p>30枚の抽選状況と過去の記録は、このブラウザ内のlocalStorageに保存します。端末・ブラウザ間の同期はありません。ブラウザデータの削除やプライベートモードの終了により失われる場合があります。日付は端末の時計に従います。同時操作による競合を避けるため、1つのタブで使用してください。</p><p>マイク・カメラ・Cookie・アクセス解析は使用しません。アプリが個人情報や会話を送信することはありません。</p></section><a href="#roulette" class="primary">はじめる　→</a></section>`;
 }
 function render() {
   checkDay();
@@ -207,6 +224,7 @@ app.addEventListener("click", (e) => {
     !state.active &&
     remaining(state).length
   ) {
+    if (!storageReady && !save()) { render(); return; }
     spinning = true;
     render();
     const pool = remaining(state);
@@ -223,28 +241,30 @@ app.addEventListener("click", (e) => {
   }
   if (action === "stop" && spinning) {
     stopSpin();
-    state = draw(state);
-    save();
+    if (!commit(draw(state))) return;
     render();
     document.querySelector<HTMLButtonElement>('[data-action="talk"]')?.focus();
     return;
   }
   if (action === "talk" && state.active) {
-    state = startTalk(state);
+    if (!commit(startTalk(state))) return;
     paused = false;
-    save();
     go("talk");
     return;
   }
   if (action === "pass") {
-    state = pass(state);
-    save();
+    if (!commit(pass(state))) return;
     render();
     return;
   }
   if (action === "finish" && state.active) {
-    state = finish(state, state.active.id);
-    save();
+    if (!commit(finish(state, state.active.id))) return;
+    go("roulette");
+    return;
+  }
+  if (action === "restart" && state.used.length === 30) {
+    if (!commit(restart(state))) return;
+    notice = "新しい30テーマを用意しました。過去の対話記録は残っています。";
     go("roulette");
     return;
   }
@@ -281,10 +301,10 @@ app.addEventListener("click", (e) => {
     document.body.append(dialog);
     dialog.addEventListener("close", () => {
       if (dialog.returnValue === "delete") {
-        state = fresh();
-        notice = "保存データを消去しました。";
-        save();
-        render();
+        if (commit(fresh())) {
+          notice = "保存データを消去しました。";
+          render();
+        }
       }
       dialog.remove();
     });
@@ -305,6 +325,7 @@ window.addEventListener("hashchange", () => {
 window.addEventListener("storage", (e) => {
   if (e.key === KEY) {
     state = restore(e.newValue).state;
+    storageReady = !!e.newValue;
     stopSpin();
     render();
   }
