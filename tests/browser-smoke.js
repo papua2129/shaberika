@@ -178,9 +178,12 @@ async (page) => {
     JSON.parse(localStorage.getItem("shaberika-v1")),
   );
   check(
-    s.used.length === 0 && s.records.length === 1,
-    "day rollover retains history",
+    s.used.length === 30 && s.records.length === 1,
+    "day rollover retains used cards and history",
   );
+  await page.getByRole("button", { name: "新しい30テーマを始める" }).click();
+  s = await page.evaluate(() => JSON.parse(localStorage.getItem("shaberika-v1")));
+  check(s.used.length === 0 && s.records.length === 1, "manual restart preserves records");
   await page.evaluate(() => localStorage.setItem("shaberika-v1", "broken"));
   await page.reload();
   check(
