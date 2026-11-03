@@ -113,13 +113,7 @@ export function restore(
         ids.has(s.active.id))
     )
       throw Error();
-    // Preserve cards completed before this update, even if an older version
-    // already cleared its daily draw pool. Passed cards cannot be recovered.
-    const used = [...new Set<number>([
-      ...s.used,
-      ...s.records.map((r: RecordEntry) => r.theme),
-    ])];
-    return { state: rollover({ ...s, used }, day), recovered: false };
+    return { state: rollover(s, day), recovered: false };
   } catch {
     return { state: fresh(day), recovered: true };
   }
