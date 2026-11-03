@@ -65,7 +65,7 @@ export const fresh = (day = dateKey()): State => ({
   records: [],
 });
 export function rollover(s: State, day = dateKey()): State {
-  return s.day === day ? s : { ...s, day, used: [], active: null };
+  return s.day === day ? s : { ...s, day };
 }
 const validTheme = (v: unknown): v is number =>
   Number.isInteger(v) && Number(v) >= 0 && Number(v) < 30;
@@ -117,6 +117,10 @@ export function restore(
   } catch {
     return { state: fresh(day), recovered: true };
   }
+}
+// A fresh deck is opt-in: a new date must never reintroduce a used card.
+export function restart(s: State, day = dateKey()): State {
+  return { ...s, day, used: [], active: null };
 }
 // Rejection sampling avoids modulo bias for every remaining pool size.
 export function randomIndex(n: number): number {

@@ -8,6 +8,7 @@ import {
   finish,
   restore,
   rollover,
+  restart,
   dateKey,
   remaining,
   randomIndex,
@@ -46,18 +47,37 @@ test("finish is idempotent and rejects stale session IDs", () => {
   const next = startTalk(draw(s));
   assert.equal(finish(next, id), next);
 });
-test("a new day resets only the draw state, keeping historical records", () => {
+test("used cards and unfinished sessions survive day/month/year changes", () => {
+  let s = startTalk(draw(fresh("2026-10-10"), () => 0));
+  s = finish(s, s.active!.id);
+  s = draw(s, () => 0);
+  const tomorrow = rollover(s, "2026-10-11");
+  assert.deepEqual(tomorrow.used, s.used);
+  assert.deepEqual(tomorrow.active, s.active);
+  assert.deepEqual(tomorrow.records, s.records);
+  const newYear = restore(JSON.stringify(s), "2027-01-01").state;
+  assert.deepEqual(newYear.used, s.used);
+  assert.deepEqual(newYear.active, s.active);
+  assert.deepEqual(newYear.records, s.records);
+  assert.ok(!remaining(newYear).includes(s.used[0]));
+  assert.ok(!remaining(newYear).includes(s.used[1]));
+});
+test("saved used cards survive reloads across calendar boundaries", () => {
+  let s = fresh("2026-10-11");
+  s = pass(draw(s, () => 0));
+  s = pass(draw(s, () => 0));
+  const restored = restore(JSON.stringify(s), "2027-01-02").state;
+  assert.deepEqual(restored.used, s.used);
+  assert.equal(remaining(restored).length, 28);
+});
+test("only an explicit restart enables a new deck, without deleting records", () => {
   let s = startTalk(draw(fresh("2026-10-10")));
   s = finish(s, s.active!.id);
-  s = draw(s);
-  const tomorrow = rollover(s, "2026-10-11");
-  assert.equal(tomorrow.used.length, 0);
-  assert.equal(tomorrow.active, null);
-  assert.deepEqual(tomorrow.records, s.records);
-  assert.equal(
-    restore(JSON.stringify(s), "2026-10-11").state.records.length,
-    1,
-  );
+  s = restart(s, "2026-10-12");
+  assert.deepEqual(s.used, []);
+  assert.equal(s.active, null);
+  assert.equal(s.records.length, 1);
+  assert.equal(s.day, "2026-10-12");
 });
 test("local date is padded, handles month/year boundaries", () => {
   assert.equal(dateKey(new Date(2026, 0, 2, 0, 1)), "2026-01-02");
