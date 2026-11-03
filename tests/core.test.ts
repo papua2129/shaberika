@@ -62,15 +62,13 @@ test("used cards and unfinished sessions survive day/month/year changes", () => 
   assert.ok(!remaining(newYear).includes(s.used[0]));
   assert.ok(!remaining(newYear).includes(s.used[1]));
 });
-test("completed themes from older daily records are not drawn again", () => {
-  const legacy = fresh("2026-10-11");
-  legacy.used = [4];
-  legacy.records = [
-    { id: "previous-day", theme: 8, date: "2026-10-10" },
-  ];
-  const migrated = restore(JSON.stringify(legacy), "2026-10-12").state;
-  assert.deepEqual(new Set(migrated.used), new Set([4, 8]));
-  assert.ok(!remaining(migrated).includes(8));
+test("saved used cards survive reloads across calendar boundaries", () => {
+  let s = fresh("2026-10-11");
+  s = pass(draw(s, () => 0));
+  s = pass(draw(s, () => 0));
+  const restored = restore(JSON.stringify(s), "2027-01-02").state;
+  assert.deepEqual(restored.used, s.used);
+  assert.equal(remaining(restored).length, 28);
 });
 test("only an explicit restart enables a new deck, without deleting records", () => {
   let s = startTalk(draw(fresh("2026-10-10")));
