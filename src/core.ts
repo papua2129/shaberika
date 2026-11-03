@@ -65,7 +65,7 @@ export const fresh = (day = dateKey()): State => ({
   records: [],
 });
 export function rollover(s: State, day = dateKey()): State {
-  return s.day === day ? s : { ...s, day, used: [], active: null };
+  return s.day === day ? s : { ...s, day };
 }
 const validTheme = (v: unknown): v is number =>
   Number.isInteger(v) && Number(v) >= 0 && Number(v) < 30;
@@ -113,10 +113,20 @@ export function restore(
         ids.has(s.active.id))
     )
       throw Error();
-    return { state: rollover(s, day), recovered: false };
+    // Preserve cards completed before this update, even if an older version
+    // already cleared its daily draw pool. Passed cards cannot be recovered.
+    const used = [...new Set<number>([
+      ...s.used,
+      ...s.records.map((r: RecordEntry) => r.theme),
+    ])];
+    return { state: rollover({ ...s, used }, day), recovered: false };
   } catch {
     return { state: fresh(day), recovered: true };
   }
+}
+// A fresh deck is opt-in: a new date must never reintroduce a used card.
+export function restart(s: State, day = dateKey()): State {
+  return { ...s, day, used: [], active: null };
 }
 // Rejection sampling avoids modulo bias for every remaining pool size.
 export function randomIndex(n: number): number {
